@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:movies_app_flutter/models/movie.dart';
 import 'package:movies_app_flutter/screens/movie_detail.dart';
 import 'package:movies_app_flutter/services/movie_service.dart';
@@ -14,31 +15,45 @@ class MovieList extends StatefulWidget {
 
 class _MovieListState extends State<MovieList> {
   MovieService? _movieService;
-  List<Movie>? _movies;
+  final _pageSize = 20;
 
-  initialize() async {
-    _movies =
-        (await _movieService?.getAll(widget.endpoint))?.data as List<Movie>;
-    setState(() {
-      _movies = _movies;
-    });
-  }
+  final PagingController<int, Movie> _pagingController =
+      PagingController(firstPageKey: 1);
 
   @override
   void initState() {
     _movieService = MovieService();
-    initialize();
+    _pagingController.addPageRequestListener((pageKey) {
+      _fetchPage(pageKey);
+    });
     super.initState();
+  }
+
+  Future _fetchPage(int pageKey) async {
+    try {
+      final movies = (await _movieService!.getAll(widget.endpoint, pageKey))
+          .data as List<Movie>;
+      final isLastPage = movies.length < _pageSize;
+      if (isLastPage) {
+        _pagingController.appendLastPage(movies);
+      } else {
+        final nextPageKey = pageKey + 1;
+        _pagingController.appendPage(movies, nextPageKey);
+      }
+    } catch (error) {
+      _pagingController.error = error;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
+    return PagedListView<int, Movie>(
         scrollDirection: Axis.horizontal,
-        itemCount: _movies?.length ?? 0,
-        itemBuilder: (context, index) {
-          return MovieItem(movie: _movies![index]);
-        });
+        pagingController: _pagingController,
+        builderDelegate: PagedChildBuilderDelegate<Movie>(
+            itemBuilder: (context, item, index) {
+          return MovieItem(movie: item);
+        }));
   }
 }
 
